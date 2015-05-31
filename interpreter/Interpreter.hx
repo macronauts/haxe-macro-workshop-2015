@@ -4,6 +4,8 @@ import haxe.Constraints.IMap;
 import haxe.macro.Expr;
 import neko.Lib;
 
+//run with haxe -dce no --run Interpreter
+
 class Interpreter {
 	
 	static function main() {
