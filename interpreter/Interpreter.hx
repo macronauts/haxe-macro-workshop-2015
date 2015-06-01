@@ -9,39 +9,61 @@ import neko.Lib;
 class Interpreter {
 	
 	static function main() {
-		var vars = ['foo' => true];
+		var vars:Scope = ['foo' => true, 'trace' => function (d) trace(d)];
 		var i = new Interpreter(vars);
-		trace(i.interpret(macro {
-			var x = 5;
-			x += 3;
-			x *= 2;
-			foo = x;
-			x = 0;
-			for (i in 0...100)
-				x += i;
-			function () return x;
-		})());
+		var func:Bool->Int = 
+			i.interpret(macro {
+				var x = 5;
+				x += 3;
+				x *= 2;
+				foo = x;
+				x = 0;
+				for (i in 0...100)
+					x += i;
+				function getX() return x;
+				function change(y, z = 200) x = y + z;
+				change(100);
+				{
+					var x = 200;
+					trace(x);
+				}
+				trace(x);
+				function (flag)
+					return
+						if (flag) ++x;
+						else x;
+			});
 		trace(vars);
+		//trace(func(
 	}
 	
-	var stack:List<Map<String, Dynamic>>;
+	/**
+	 * The interpreter's stack.
+	 * Do not access this directly.
+	 * Instead, rely on `enterScope`, `scoped`, `seekScope` and `resolve`.
+	 */
+	@:noCompletion var stack:List<Scope>;
 	
 	public function new(?vars, ?stack) {
 		this.stack = 
 			if (stack == null) new List();
 			else stack;
-		enter(vars);
+		enterScope(vars);
 	}
 	
-	function enter(?scope)
+	/**
+	 * Enters a new scope
+	 * @param	scope if null, an empty scope is entered
+	 */
+	function enterScope(?scope)
 		if (scope != null)
 			stack.push(scope);
 		else
-			enter(new Map());
-		
-	function leave() 
-		stack.pop();
-		
+			enterScope(new Map());
+			
+	/**
+	 * Executes a function and then restores the previous scope.
+	 */
 	function scoped<T>(v:Void->T):T {
 		var depth = stack.length;
 		
@@ -58,7 +80,16 @@ class Interpreter {
 		restore();
 		return ret;
 	}
-		
+	
+	/**
+	 * Evaluates an expression to construct a valid left hand value or fails otherwise.
+	 * 
+	 * Valid left hand values are:
+	 * 
+	 * - expr[key]
+	 * - expr.field
+	 * - identifier
+	 */	
 	function leftHandValue<A>(e:ExprOf<A>):LeftHandValue<A>
 		return switch e.expr {
 			case EField(owner, field):
@@ -71,10 +102,10 @@ class Interpreter {
 					}
 				}
 			case EConst(CIdent(s)):
-				var frame = seek(s);
+				var scope = seekScope(s);
 				{
-					get: function () return frame[s],
-					set: function (value) return frame[s] = value,
+					get: function () return scope[s],
+					set: function (value) return scope[s] = value,
 				}
 			case EArray(array, key):
 				var a:Dynamic = interpret(array);
@@ -97,14 +128,23 @@ class Interpreter {
 				throw 'Cannot assign value to ${v.getName()}';
 		}
 	
-	function resolve(name:String) 
-		return seek(name)[name];
+	/**
+	 * Resolves an identifier
+	 * 
+	 * @param	identifier
+	 */
+	function resolve(identifier:String) 
+		return seekScope(identifier)[identifier];
 	
-	function seek(name:String) {
+	/**
+	 * Seeks the scope within which the given `identifier` is defined
+	 * @param	identifier
+	 */
+	function seekScope(identifier:String) {
 		for (frame in stack)
-			if (frame.exists(name))
+			if (frame.exists(identifier))
 				return frame;
-		throw 'unknown identifier $name';
+		throw 'unknown identifier $identifier';
 	}
 		
 	public function interpret<A>(e:ExprOf<A>):A {
@@ -130,6 +170,20 @@ class Interpreter {
 							case CIdent(s):
 								resolve(s);
 						}
+						
+					case ECall(e, params):
+						var thisArg = null;
+						var func = 
+							switch e.expr {
+								case EField(e, field):
+									thisArg = interpret(e);
+									Reflect.getProperty(thisArg, field);
+								default:
+									interpret(e);
+							}
+						Reflect.callMethod(thisArg, func, params.map(interpret));
+					case EField(e, field):
+						Reflect.getProperty(interpret(e), field);
 					case EArrayDecl(values):
 						[for (v in values) interpret(v)];
 					case EObjectDecl(fields):
@@ -156,7 +210,7 @@ class Interpreter {
 								for (value in target) 
 									try 
 										scoped(function () {
-											enter([s => value]);
+											enterScope([s => value]);
 											ret = interpret(body);
 										})
 									catch (e:LoopControl) 
@@ -195,7 +249,7 @@ class Interpreter {
 					case EBlock(exprs):
 						scoped(function () {
 							
-							enter();
+							enterScope();
 							
 							var ret = null;
 							
@@ -205,25 +259,25 @@ class Interpreter {
 							return ret;
 						});
 					case EVars(vars):
-						enter([for (v in vars) v.name => interpret(v.expr)]);
+						enterScope([for (v in vars) v.name => interpret(v.expr)]);
 						null;
 					case EFunction(name, f):
-						//var snapshot = null;
 						var separate:Interpreter = null;
 						var func = Reflect.makeVarArgs(function (args:Array<Dynamic>):Dynamic {
 							var m = new Map();
 							for (i in 0...f.args.length)
 								m.set(
 									f.args[i].name, 
-									if (i < args.length) 
-										if (f.args[i].opt) null
+									if (i >= args.length) 
+										if (f.args[i].opt || f.args[i].value != null) 
+											separate.interpret(f.args[i].value)
 										else throw 'missing argument ' + f.args[i].name
 									else
 										args[i]
 								);
 								
 							return scoped(function () {
-								separate.enter(m);
+								separate.enterScope(m);
 								return 
 									try {
 										separate.interpret(f.expr);
@@ -237,7 +291,7 @@ class Interpreter {
 						});
 						
 						if (name != null)
-							enter([name => func]);
+							enterScope([name => func]);
 						
 						separate = new Interpreter(Lambda.list(this.stack));
 						func;
@@ -250,6 +304,9 @@ class Interpreter {
 		return ret;
 	}
 	
+	/**
+	 * Evaluates binary operation
+	 */
 	function binop(op:Binop, v1:Dynamic, v2:Dynamic):Dynamic {
 		return 
 			switch op {
@@ -268,16 +325,32 @@ class Interpreter {
 	}
 }
 
+/**
+ * A scope that maps variables to values.
+ */
+typedef Scope = Map<String, Dynamic>;
+
+/**
+ * Representation of values that may be on the left hand side of an assignment statement.
+ */
 typedef LeftHandValue<A> = {
 	function get():A;
 	function set(v:A):A;
 }
 
+/**
+ * Thrown to implement loop jumps.
+ * See EFor and EWhile implementation
+ */
 enum LoopControl {
 	LCBreak;
 	LCContinue;
 }
 
+/**
+ * Instantiated and thrown to return values from functions.
+ * See EFunction handling.
+ */
 class Return {
 	public var value(default, null):Dynamic;
 	public function new(value) 
