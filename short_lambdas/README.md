@@ -1,6 +1,6 @@
 # Short Lambdas
 
-## Key lesson: Using build macros for syntax transformations
+## Key lesson: Using build macros for syntax transformations.
 
 **Focus:** Show how a build macro applies to a whole class, and can create, delete or modify fields, and all the expressions in each field.
 
