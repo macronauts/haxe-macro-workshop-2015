@@ -6,7 +6,7 @@ using haxe.macro.Tools;
 class ExpressionExplorer {
 
 	static function main() {
-		var myExpression = macro function() return null;
+		var myExpression = macro var x = 0;
 
 		// Trace the expression, showing the enums and objects it is made up of.
 		trace( myExpression.expr );
