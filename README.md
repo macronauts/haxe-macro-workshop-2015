@@ -48,7 +48,7 @@ Macros build on top of several Haxe concepts.  Each of these is a cool enough an
 	}
 	switch [gender,nation] {
 		case [Male,French]: trace('He is French!');
-		case [Female,French]: trace('She is German!');
+		case [Female,German]: trace('She is German!');
 		case [Male,nation]: trace('He is from $nation!');
 		case [Female,nation]: trace('She is from $nation!');
 	}
