@@ -1,0 +1,32 @@
+language: haxe
+
+haxe:
+  - "3.2.1"
+  - development
+
+sudo: false
+
+script:
+  # Play Areas
+  - pushd expression_explorer;
+    haxe --run ExpressionExplorer;
+    popd;
+  - pushd interpreter;
+    haxe -dce no --run Interpreter;
+    popd;
+  # Problems
+  - pushd include_release_notes/solution_basic;
+    haxe build.hxml;
+    popd;
+  - pushd object_initialisation/solution_object_literal_syntax;
+    haxe build.hxml;
+    popd;
+  - pushd object_initialisation/solution_var_syntax;
+    haxe build.hxml;
+    popd;
+  - pushd object_initialisation/solution_var_syntax_without_reification;
+    haxe build.hxml;
+    popd;
+  - pushd short_lambdas/solution_no_build_macro;
+    haxe build.hxml;
+    popd;

@@ -1,5 +1,7 @@
 # haxe-macro-workshop-2015
 
+[![Build Status](https://travis-ci.org/macronauts/haxe-macro-workshop-2015.svg?branch=master)](https://travis-ci.org/macronauts/haxe-macro-workshop-2015)
+
 Gateway drugs for the world of Haxe macros.
 
 ![Mad scientist](https://avatars3.githubusercontent.com/u/12681912?v=3&s=410 "You too could look like this... with MACROS!")
